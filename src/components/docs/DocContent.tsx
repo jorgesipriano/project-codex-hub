@@ -1,10 +1,17 @@
 import { CodeBlock } from "./CodeBlock";
 import { Breadcrumb } from "./Breadcrumb";
-import { AlertCircle, CheckCircle2, Info, Lightbulb } from "lucide-react";
+import { DocEditor } from "./DocEditor";
+import { AlertCircle, CheckCircle2, Edit2, Info, Lightbulb, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DocContentProps {
   activeSection: string;
+  content: string;
+  title: string;
+  isEditing: boolean;
+  onEdit: () => void;
+  onSave: (content: string) => void;
+  onCancelEdit: () => void;
 }
 
 interface AlertProps {
@@ -35,365 +42,214 @@ function Alert({ type, children }: AlertProps) {
   );
 }
 
-const contentSections: Record<string, React.ReactNode> = {
-  overview: (
-    <div className="doc-prose animate-fade-in">
-      <h1>Visão Geral</h1>
-      <p>
-        Bem-vindo à documentação do projeto! Este guia completo irá ajudá-lo a entender
-        a estrutura, configuração e uso de todas as funcionalidades disponíveis.
-      </p>
-      
-      <Alert type="info">
-        Esta documentação é atualizada regularmente. Verifique a versão para garantir
-        que está usando as informações mais recentes.
-      </Alert>
+function parseMarkdown(content: string) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeContent: string[] = [];
+  let codeLanguage = "";
+  let listItems: string[] = [];
 
-      <h2>Recursos Principais</h2>
-      <ul>
-        <li>Gerenciamento completo de sessões TMUX</li>
-        <li>Scripts de automação para deploy</li>
-        <li>Configuração de ambiente de desenvolvimento</li>
-        <li>Integração com banco de dados</li>
-        <li>APIs RESTful documentadas</li>
-      </ul>
-
-      <h2>Requisitos do Sistema</h2>
-      <p>Antes de começar, certifique-se de ter instalado:</p>
-      
-      <CodeBlock
-        language="bash"
-        code={`# Verificar versões instaladas
-node --version    # >= 18.0.0
-npm --version     # >= 9.0.0
-git --version     # >= 2.30.0`}
-      />
-    </div>
-  ),
-
-  tmux: (
-    <div className="doc-prose animate-fade-in">
-      <h1>Acessar TMUX</h1>
-      <p>
-        O TMUX é um multiplexador de terminal que permite executar várias sessões
-        em uma única janela. Ideal para gerenciar processos em servidores remotos.
-      </p>
-
-      <Alert type="tip">
-        O TMUX mantém suas sessões ativas mesmo após desconectar do SSH, 
-        permitindo retomar o trabalho exatamente de onde parou.
-      </Alert>
-
-      <h2>Comandos Básicos</h2>
-      
-      <h3>Iniciar uma nova sessão</h3>
-      <CodeBlock
-        language="bash"
-        filename="terminal"
-        code={`# Criar nova sessão com nome
-tmux new -s minha-sessao
-
-# Criar sessão anônima
-tmux new`}
-      />
-
-      <h3>Listar sessões ativas</h3>
-      <CodeBlock
-        language="bash"
-        filename="terminal"
-        code={`# Listar todas as sessões
-tmux ls
-
-# Exemplo de saída:
-# dev: 3 windows (created Mon Jan 5 10:00:00 2026)
-# server: 1 windows (created Mon Jan 5 09:30:00 2026)`}
-      />
-
-      <h3>Anexar a uma sessão existente</h3>
-      <CodeBlock
-        language="bash"
-        filename="terminal"
-        code={`# Anexar por nome
-tmux attach -t minha-sessao
-
-# Anexar à última sessão
-tmux attach
-
-# Forçar desanexar outros clientes
-tmux attach -dt minha-sessao`}
-      />
-
-      <h2>Atalhos de Teclado</h2>
-      <p>
-        Todos os atalhos começam com o prefixo <code className="px-1.5 py-0.5 bg-secondary rounded text-primary">Ctrl + B</code>
-      </p>
-
-      <div className="overflow-x-auto my-4">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 text-foreground">Atalho</th>
-              <th className="text-left py-2 text-foreground">Ação</th>
-            </tr>
-          </thead>
-          <tbody className="text-muted-foreground">
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B D</code></td>
-              <td className="py-2">Desanexar da sessão</td>
-            </tr>
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B C</code></td>
-              <td className="py-2">Criar nova janela</td>
-            </tr>
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B N</code></td>
-              <td className="py-2">Próxima janela</td>
-            </tr>
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B P</code></td>
-              <td className="py-2">Janela anterior</td>
-            </tr>
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B %</code></td>
-              <td className="py-2">Dividir painel verticalmente</td>
-            </tr>
-            <tr className="border-b border-border/50">
-              <td className="py-2"><code className="text-primary">Ctrl+B "</code></td>
-              <td className="py-2">Dividir painel horizontalmente</td>
-            </tr>
-            <tr>
-              <td className="py-2"><code className="text-primary">Ctrl+B X</code></td>
-              <td className="py-2">Fechar painel atual</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h2>Configuração Personalizada</h2>
-      <p>Crie ou edite o arquivo <code>~/.tmux.conf</code> para personalizar:</p>
-      
-      <CodeBlock
-        language="bash"
-        filename="~/.tmux.conf"
-        code={`# Alterar prefixo para Ctrl+A
-unbind C-b
-set -g prefix C-a
-bind C-a send-prefix
-
-# Habilitar mouse
-set -g mouse on
-
-# Iniciar janelas e painéis em 1
-set -g base-index 1
-setw -g pane-base-index 1
-
-# Melhorar cores
-set -g default-terminal "screen-256color"
-
-# Status bar personalizada
-set -g status-bg '#1a1b26'
-set -g status-fg '#a9b1d6'`}
-      />
-
-      <Alert type="success">
-        Após editar o arquivo de configuração, recarregue com:
-        <code className="ml-2 px-2 py-0.5 bg-secondary rounded">tmux source-file ~/.tmux.conf</code>
-      </Alert>
-    </div>
-  ),
-
-  quickstart: (
-    <div className="doc-prose animate-fade-in">
-      <h1>Início Rápido</h1>
-      <p>
-        Siga estes passos para configurar o ambiente de desenvolvimento rapidamente.
-      </p>
-
-      <h2>1. Clonar o Repositório</h2>
-      <CodeBlock
-        language="bash"
-        code={`git clone https://github.com/seu-usuario/seu-projeto.git
-cd seu-projeto`}
-      />
-
-      <h2>2. Instalar Dependências</h2>
-      <CodeBlock
-        language="bash"
-        code={`npm install
-# ou
-yarn install`}
-      />
-
-      <h2>3. Configurar Variáveis de Ambiente</h2>
-      <CodeBlock
-        language="bash"
-        filename=".env.local"
-        code={`DATABASE_URL="postgresql://user:pass@localhost:5432/db"
-API_KEY="sua-chave-api"
-NODE_ENV="development"`}
-      />
-
-      <h2>4. Iniciar o Servidor</h2>
-      <CodeBlock
-        language="bash"
-        code={`npm run dev`}
-      />
-
-      <Alert type="success">
-        O servidor estará disponível em <code>http://localhost:3000</code>
-      </Alert>
-    </div>
-  ),
-
-  "basic-commands": (
-    <div className="doc-prose animate-fade-in">
-      <h1>Comandos Básicos do Terminal</h1>
-      <p>
-        Referência rápida dos comandos mais utilizados no dia a dia.
-      </p>
-
-      <h2>Navegação de Arquivos</h2>
-      <CodeBlock
-        language="bash"
-        code={`# Listar arquivos
-ls -la
-
-# Mudar diretório
-cd /caminho/para/pasta
-
-# Voltar um diretório
-cd ..
-
-# Ir para home
-cd ~
-
-# Ver diretório atual
-pwd`}
-      />
-
-      <h2>Manipulação de Arquivos</h2>
-      <CodeBlock
-        language="bash"
-        code={`# Criar arquivo
-touch arquivo.txt
-
-# Criar diretório
-mkdir nova-pasta
-
-# Copiar arquivo
-cp origem.txt destino.txt
-
-# Mover/Renomear
-mv arquivo.txt novo-nome.txt
-
-# Remover arquivo
-rm arquivo.txt
-
-# Remover diretório
-rm -rf pasta/`}
-      />
-
-      <h2>Visualização de Conteúdo</h2>
-      <CodeBlock
-        language="bash"
-        code={`# Ver conteúdo completo
-cat arquivo.txt
-
-# Paginar conteúdo
-less arquivo.txt
-
-# Primeiras linhas
-head -n 20 arquivo.txt
-
-# Últimas linhas
-tail -n 20 arquivo.txt
-
-# Monitorar em tempo real
-tail -f logs/app.log`}
-      />
-
-      <Alert type="tip">
-        Use <code>Tab</code> para autocompletar nomes de arquivos e diretórios!
-      </Alert>
-    </div>
-  ),
-
-  "project-structure": (
-    <div className="doc-prose animate-fade-in">
-      <h1>Estrutura do Projeto</h1>
-      <p>
-        Visão geral da organização de diretórios e arquivos do projeto.
-      </p>
-
-      <CodeBlock
-        language="text"
-        filename="Estrutura"
-        showLineNumbers={false}
-        code={`📦 meu-projeto/
-├── 📂 src/
-│   ├── 📂 components/     # Componentes reutilizáveis
-│   │   ├── 📂 ui/         # Componentes base (botões, inputs)
-│   │   └── 📂 features/   # Componentes específicos
-│   ├── 📂 pages/          # Páginas da aplicação
-│   ├── 📂 hooks/          # Custom hooks
-│   ├── 📂 lib/            # Utilitários e helpers
-│   ├── 📂 services/       # Chamadas de API
-│   ├── 📂 types/          # Definições TypeScript
-│   └── 📄 main.tsx        # Ponto de entrada
-├── 📂 public/             # Assets estáticos
-├── 📂 tests/              # Testes
-├── 📄 package.json
-├── 📄 tsconfig.json
-└── 📄 README.md`}
-      />
-
-      <h2>Convenções de Nomenclatura</h2>
-      <ul>
-        <li><strong>Componentes:</strong> PascalCase (ex: UserProfile.tsx)</li>
-        <li><strong>Hooks:</strong> camelCase com prefixo use (ex: useAuth.ts)</li>
-        <li><strong>Utilitários:</strong> camelCase (ex: formatDate.ts)</li>
-        <li><strong>Tipos:</strong> PascalCase (ex: User.ts)</li>
-      </ul>
-    </div>
-  ),
-};
-
-export function DocContent({ activeSection }: DocContentProps) {
-  const content = contentSections[activeSection] || contentSections.overview;
-  
-  const getBreadcrumbItems = () => {
-    const titles: Record<string, string> = {
-      overview: "Visão Geral",
-      quickstart: "Início Rápido",
-      tmux: "Acessar TMUX",
-      "basic-commands": "Comandos Básicos",
-      "project-structure": "Estrutura do Projeto",
-    };
-    
-    return [
-      { label: "Docs" },
-      { label: titles[activeSection] || "Documentação" },
-    ];
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="list-disc list-inside mb-4 text-muted-foreground space-y-1">
+          {listItems.map((item, i) => (
+            <li key={i}>{parseInlineMarkdown(item)}</li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+    }
   };
+
+  const parseInlineMarkdown = (text: string): React.ReactNode => {
+    // Bold
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-semibold">$1</strong>');
+    // Italic
+    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Inline code
+    text = text.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-secondary rounded text-primary text-sm">$1</code>');
+    
+    return <span dangerouslySetInnerHTML={{ __html: text }} />;
+  };
+
+  lines.forEach((line, index) => {
+    // Code block
+    if (line.startsWith("```")) {
+      if (inCodeBlock) {
+        elements.push(
+          <CodeBlock 
+            key={`code-${elements.length}`} 
+            code={codeContent.join("\n")} 
+            language={codeLanguage || "bash"}
+          />
+        );
+        codeContent = [];
+        codeLanguage = "";
+        inCodeBlock = false;
+      } else {
+        flushList();
+        inCodeBlock = true;
+        codeLanguage = line.slice(3).trim();
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeContent.push(line);
+      return;
+    }
+
+    // List items
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      listItems.push(line.slice(2));
+      return;
+    } else {
+      flushList();
+    }
+
+    // Headers
+    if (line.startsWith("# ")) {
+      elements.push(
+        <h1 key={`h1-${index}`} className="text-3xl font-bold text-foreground mb-4 mt-8 first:mt-0">
+          {line.slice(2)}
+        </h1>
+      );
+      return;
+    }
+
+    if (line.startsWith("## ")) {
+      elements.push(
+        <h2 key={`h2-${index}`} className="text-2xl font-semibold text-foreground mb-3 mt-6 pb-2 border-b border-border">
+          {line.slice(3)}
+        </h2>
+      );
+      return;
+    }
+
+    if (line.startsWith("### ")) {
+      elements.push(
+        <h3 key={`h3-${index}`} className="text-xl font-semibold text-foreground mb-2 mt-4">
+          {line.slice(4)}
+        </h3>
+      );
+      return;
+    }
+
+    // Alert blocks
+    if (line.startsWith("> [!INFO]")) {
+      const alertContent = line.slice(10).trim();
+      elements.push(<Alert key={`alert-${index}`} type="info">{alertContent}</Alert>);
+      return;
+    }
+    if (line.startsWith("> [!TIP]")) {
+      const alertContent = line.slice(9).trim();
+      elements.push(<Alert key={`alert-${index}`} type="tip">{alertContent}</Alert>);
+      return;
+    }
+    if (line.startsWith("> [!SUCCESS]")) {
+      const alertContent = line.slice(13).trim();
+      elements.push(<Alert key={`alert-${index}`} type="success">{alertContent}</Alert>);
+      return;
+    }
+    if (line.startsWith("> [!WARNING]")) {
+      const alertContent = line.slice(13).trim();
+      elements.push(<Alert key={`alert-${index}`} type="warning">{alertContent}</Alert>);
+      return;
+    }
+
+    // Empty line
+    if (line.trim() === "") {
+      return;
+    }
+
+    // Regular paragraph
+    elements.push(
+      <p key={`p-${index}`} className="text-muted-foreground leading-relaxed mb-4">
+        {parseInlineMarkdown(line)}
+      </p>
+    );
+  });
+
+  flushList();
+
+  return elements;
+}
+
+export function DocContent({ 
+  activeSection, 
+  content, 
+  title,
+  isEditing, 
+  onEdit, 
+  onSave,
+  onCancelEdit 
+}: DocContentProps) {
+  if (isEditing) {
+    return (
+      <main className="flex-1 h-[calc(100vh-64px)] overflow-hidden">
+        <DocEditor 
+          initialContent={content}
+          onSave={onSave}
+          onCancel={onCancelEdit}
+        />
+      </main>
+    );
+  }
+
+  const hasContent = content && content.trim().length > 0;
 
   return (
     <main className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <Breadcrumb items={getBreadcrumbItems()} />
-        {content}
-        
-        {/* Footer navigation */}
-        <div className="mt-12 pt-6 border-t border-border flex items-center justify-between text-sm">
-          <div className="text-muted-foreground">
-            Última atualização: 5 de Janeiro, 2026
-          </div>
-          <a 
-            href="#" 
-            className="text-primary hover:underline flex items-center gap-1"
+        <div className="flex items-center justify-between mb-6">
+          <Breadcrumb items={[{ label: "Docs" }, { label: title }]} />
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
           >
-            Editar esta página →
-          </a>
+            <Edit2 className="w-4 h-4" />
+            Editar
+          </button>
         </div>
+
+        {hasContent ? (
+          <div className="doc-prose animate-fade-in">
+            {parseMarkdown(content)}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-4">
+              <FileText className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Página vazia</h2>
+            <p className="text-muted-foreground mb-6 max-w-md">
+              Esta página ainda não tem conteúdo. Clique em "Editar" para adicionar sua documentação.
+            </p>
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+            >
+              <Edit2 className="w-4 h-4" />
+              Começar a escrever
+            </button>
+          </div>
+        )}
+        
+        {hasContent && (
+          <div className="mt-12 pt-6 border-t border-border flex items-center justify-between text-sm">
+            <div className="text-muted-foreground">
+              Última atualização: {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+            <button 
+              onClick={onEdit}
+              className="text-primary hover:underline flex items-center gap-1"
+            >
+              Editar esta página →
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );
