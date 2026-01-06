@@ -1,43 +1,78 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DocHeader } from "@/components/docs/DocHeader";
 import { Sidebar, NavItem } from "@/components/docs/Sidebar";
 import { DocContent } from "@/components/docs/DocContent";
 import { 
-  loadDocsFromStorage, 
-  saveDocsToStorage, 
-  loadNavigationFromStorage, 
-  saveNavigationToStorage,
+  loadDocsFromDatabase, 
+  saveDocToDatabase,
+  deleteDocFromDatabase,
+  loadNavigationFromDatabase, 
+  saveNavigationToDatabase,
   generateId 
-} from "@/lib/docs-storage";
+} from "@/lib/docs-database";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
+  const { user, loading: authLoading, signOut } = useAuth();
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [docs, setDocs] = useState<Record<string, string>>({});
   const [navigation, setNavigation] = useState<NavItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setDocs(loadDocsFromStorage());
-    setNavigation(loadNavigationFromStorage());
-  }, []);
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
 
-  const handleSaveContent = (content: string) => {
-    const newDocs = { ...docs, [activeSection]: content };
-    setDocs(newDocs);
-    saveDocsToStorage(newDocs);
-    setIsEditing(false);
-    toast.success("Documento salvo com sucesso!");
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [docsData, navData] = await Promise.all([
+        loadDocsFromDatabase(),
+        loadNavigationFromDatabase()
+      ]);
+      setDocs(docsData);
+      setNavigation(navData);
+    } catch (error) {
+      console.error("Error loading data:", error);
+      toast.error("Erro ao carregar dados");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddSection = (parentId?: string) => {
+  const handleSaveContent = async (content: string) => {
+    try {
+      await saveDocToDatabase(activeSection, content);
+      setDocs(prev => ({ ...prev, [activeSection]: content }));
+      setIsEditing(false);
+      toast.success("Documento salvo com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao salvar documento");
+    }
+  };
+
+  const handleAddSection = async (parentId?: string) => {
     const newId = generateId();
     const newTitle = "Nova Página";
 
+    let newNav: NavItem[];
     if (parentId) {
-      // Add child to existing section
-      const newNav = navigation.map(section => {
+      newNav = navigation.map(section => {
         if (section.id === parentId) {
           return {
             ...section,
@@ -46,35 +81,35 @@ const Index = () => {
         }
         return section;
       });
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
     } else {
-      // Add new top-level section
       const newSection: NavItem = {
         id: newId,
         title: "Nova Seção",
         icon: "folder",
         children: []
       };
-      const newNav = [...navigation, newSection];
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
+      newNav = [...navigation, newSection];
     }
 
-    // Create empty doc
-    const newDocs = { ...docs, [newId]: "" };
-    setDocs(newDocs);
-    saveDocsToStorage(newDocs);
-
-    setActiveSection(newId);
-    setIsEditing(true);
-    toast.success("Nova página criada!");
+    try {
+      await saveNavigationToDatabase(newNav);
+      await saveDocToDatabase(newId, "");
+      setNavigation(newNav);
+      setDocs(prev => ({ ...prev, [newId]: "" }));
+      setActiveSection(newId);
+      setIsEditing(true);
+      toast.success("Nova página criada!");
+    } catch (error) {
+      toast.error("Erro ao criar página");
+    }
   };
 
-  const handleDeleteSection = (sectionId: string, parentId?: string) => {
+  const handleDeleteSection = async (sectionId: string, parentId?: string) => {
+    let newNav: NavItem[];
+    const idsToDelete: string[] = [sectionId];
+
     if (parentId) {
-      // Delete child
-      const newNav = navigation.map(section => {
+      newNav = navigation.map(section => {
         if (section.id === parentId) {
           return {
             ...section,
@@ -83,36 +118,36 @@ const Index = () => {
         }
         return section;
       });
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
     } else {
-      // Delete top-level section and all its children
       const section = navigation.find(s => s.id === sectionId);
-      const idsToDelete = [sectionId, ...(section?.children?.map(c => c.id) || [])];
-      
-      const newNav = navigation.filter(s => s.id !== sectionId);
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
+      idsToDelete.push(...(section?.children?.map(c => c.id) || []));
+      newNav = navigation.filter(s => s.id !== sectionId);
+    }
 
-      // Remove associated docs
+    try {
+      await saveNavigationToDatabase(newNav);
+      for (const id of idsToDelete) {
+        await deleteDocFromDatabase(id);
+      }
+      setNavigation(newNav);
       const newDocs = { ...docs };
       idsToDelete.forEach(id => delete newDocs[id]);
       setDocs(newDocs);
-      saveDocsToStorage(newDocs);
-    }
 
-    // If deleted current section, switch to first available
-    if (activeSection === sectionId) {
-      const firstSection = navigation[0]?.children?.[0]?.id || navigation[0]?.id || "overview";
-      setActiveSection(firstSection);
+      if (activeSection === sectionId) {
+        const firstSection = newNav[0]?.children?.[0]?.id || newNav[0]?.id || "overview";
+        setActiveSection(firstSection);
+      }
+      toast.success("Página excluída!");
+    } catch (error) {
+      toast.error("Erro ao excluir página");
     }
-
-    toast.success("Página excluída!");
   };
 
-  const handleRenameSection = (sectionId: string, newTitle: string, parentId?: string) => {
+  const handleRenameSection = async (sectionId: string, newTitle: string, parentId?: string) => {
+    let newNav: NavItem[];
     if (parentId) {
-      const newNav = navigation.map(section => {
+      newNav = navigation.map(section => {
         if (section.id === parentId) {
           return {
             ...section,
@@ -123,16 +158,19 @@ const Index = () => {
         }
         return section;
       });
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
     } else {
-      const newNav = navigation.map(section => 
+      newNav = navigation.map(section => 
         section.id === sectionId ? { ...section, title: newTitle } : section
       );
-      setNavigation(newNav);
-      saveNavigationToStorage(newNav);
     }
-    toast.success("Renomeado com sucesso!");
+
+    try {
+      await saveNavigationToDatabase(newNav);
+      setNavigation(newNav);
+      toast.success("Renomeado com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao renomear");
+    }
   };
 
   const getCurrentTitle = () => {
@@ -144,9 +182,32 @@ const Index = () => {
     return "Documento";
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
   return (
     <div className="min-h-screen bg-background">
-      <DocHeader onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <DocHeader 
+        onMenuToggle={() => setSidebarOpen(!sidebarOpen)} 
+        rightContent={
+          <Button variant="ghost" size="sm" onClick={handleSignOut} className="gap-2">
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Sair</span>
+          </Button>
+        }
+      />
       
       <div className="flex">
         {/* Sidebar - Desktop */}

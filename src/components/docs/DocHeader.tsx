@@ -1,11 +1,12 @@
-import { Book, Github, Menu, Moon, Sun } from "lucide-react";
-import { useState } from "react";
+import { Book, Github, Menu } from "lucide-react";
+import { ReactNode } from "react";
 
 interface DocHeaderProps {
   onMenuToggle?: () => void;
+  rightContent?: ReactNode;
 }
 
-export function DocHeader({ onMenuToggle }: DocHeaderProps) {
+export function DocHeader({ onMenuToggle, rightContent }: DocHeaderProps) {
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="h-full px-4 flex items-center justify-between">
@@ -23,8 +24,8 @@ export function DocHeader({ onMenuToggle }: DocHeaderProps) {
               <Book className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-foreground">Documentação</h1>
-              <p className="text-xs text-muted-foreground hidden sm:block">Meu Projeto</p>
+              <h1 className="text-lg font-semibold text-foreground">doc two-jhey</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">Documentação</p>
             </div>
           </div>
         </div>
@@ -39,6 +40,7 @@ export function DocHeader({ onMenuToggle }: DocHeaderProps) {
           >
             <Github className="w-5 h-5" />
           </a>
+          {rightContent}
         </div>
       </div>
     </header>
