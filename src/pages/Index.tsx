@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DocHeader } from "@/components/docs/DocHeader";
-import { Sidebar, NavItem } from "@/components/docs/Sidebar";
+import { Sidebar, NavItem, ItemType } from "@/components/docs/Sidebar";
 import { DocContent } from "@/components/docs/DocContent";
 import { 
   loadDocsFromDatabase, 
@@ -66,103 +66,230 @@ const Index = () => {
     }
   };
 
-  const handleAddSection = async (parentId?: string) => {
-    const newId = generateId();
-    const newTitle = "Nova Página";
-
-    let newNav: NavItem[];
-    if (parentId) {
-      newNav = navigation.map(section => {
-        if (section.id === parentId) {
-          return {
-            ...section,
-            children: [...(section.children || []), { id: newId, title: newTitle }]
-          };
-        }
-        return section;
-      });
-    } else {
-      const newSection: NavItem = {
-        id: newId,
-        title: "Nova Seção",
-        icon: "folder",
-        children: []
-      };
-      newNav = [...navigation, newSection];
-    }
-
-    try {
-      await saveNavigationToDatabase(newNav);
-      await saveDocToDatabase(newId, "");
-      setNavigation(newNav);
-      setDocs(prev => ({ ...prev, [newId]: "" }));
-      setActiveSection(newId);
-      setIsEditing(true);
-      toast.success("Nova página criada!");
-    } catch (error) {
-      toast.error("Erro ao criar página");
+  const getDefaultContent = (type: ItemType, title: string) => {
+    switch (type) {
+      case "task":
+        return `# ${title}\n\n- [ ] Tarefa 1\n- [ ] Tarefa 2\n- [ ] Tarefa 3\n`;
+      case "note":
+        return `# ${title}\n\nEscreva suas anotações aqui...\n`;
+      default:
+        return "";
     }
   };
 
-  const handleDeleteSection = async (sectionId: string, parentId?: string) => {
-    let newNav: NavItem[];
-    const idsToDelete: string[] = [sectionId];
+  const getDefaultTitle = (type: ItemType) => {
+    switch (type) {
+      case "section":
+        return "Nova Seção";
+      case "folder":
+        return "Nova Pasta";
+      case "note":
+        return "Nova Nota";
+      case "task":
+        return "Nova Tarefa";
+      default:
+        return "Novo Item";
+    }
+  };
 
-    if (parentId) {
-      newNav = navigation.map(section => {
-        if (section.id === parentId) {
-          return {
-            ...section,
-            children: section.children?.filter(child => child.id !== sectionId)
-          };
-        }
-        return section;
+  // Função recursiva para adicionar item em qualquer nível
+  const addItemToNavigation = (
+    items: NavItem[], 
+    parentId: string | undefined, 
+    newItem: NavItem
+  ): NavItem[] => {
+    if (!parentId) {
+      return [...items, newItem];
+    }
+
+    return items.map(item => {
+      if (item.id === parentId) {
+        return {
+          ...item,
+          children: [...(item.children || []), newItem]
+        };
+      }
+      if (item.children) {
+        return {
+          ...item,
+          children: addItemToNavigation(item.children, parentId, newItem)
+        };
+      }
+      return item;
+    });
+  };
+
+  const handleAddSection = async (type: ItemType, parentId?: string) => {
+    const newId = generateId();
+    const newTitle = getDefaultTitle(type);
+
+    const newItem: NavItem = {
+      id: newId,
+      title: newTitle,
+      type,
+      icon: type === "section" || type === "folder" ? "folder" : type,
+      children: type === "section" || type === "folder" ? [] : undefined
+    };
+
+    const newNav = addItemToNavigation(navigation, parentId, newItem);
+
+    try {
+      await saveNavigationToDatabase(newNav);
+      await saveDocToDatabase(newId, getDefaultContent(type, newTitle));
+      setNavigation(newNav);
+      setDocs(prev => ({ ...prev, [newId]: getDefaultContent(type, newTitle) }));
+      setActiveSection(newId);
+      setIsEditing(true);
+      toast.success(`${getDefaultTitle(type)} criada!`);
+    } catch (error) {
+      toast.error("Erro ao criar item");
+    }
+  };
+
+  // Função recursiva para coletar todos os IDs de um item e seus filhos
+  const collectAllIds = (item: NavItem): string[] => {
+    const ids = [item.id];
+    if (item.children) {
+      item.children.forEach(child => {
+        ids.push(...collectAllIds(child));
       });
-    } else {
-      const section = navigation.find(s => s.id === sectionId);
-      idsToDelete.push(...(section?.children?.map(c => c.id) || []));
-      newNav = navigation.filter(s => s.id !== sectionId);
+    }
+    return ids;
+  };
+
+  // Função recursiva para deletar item em qualquer nível
+  const removeItemFromNavigation = (
+    items: NavItem[], 
+    itemId: string, 
+    parentId?: string
+  ): { newItems: NavItem[]; deletedIds: string[] } => {
+    let deletedIds: string[] = [];
+
+    if (!parentId) {
+      const itemToDelete = items.find(i => i.id === itemId);
+      if (itemToDelete) {
+        deletedIds = collectAllIds(itemToDelete);
+      }
+      return {
+        newItems: items.filter(i => i.id !== itemId),
+        deletedIds
+      };
+    }
+
+    const newItems = items.map(item => {
+      if (item.id === parentId) {
+        const childToDelete = item.children?.find(c => c.id === itemId);
+        if (childToDelete) {
+          deletedIds = collectAllIds(childToDelete);
+        }
+        return {
+          ...item,
+          children: item.children?.filter(c => c.id !== itemId)
+        };
+      }
+      if (item.children) {
+        const result = removeItemFromNavigation(item.children, itemId, parentId);
+        if (result.deletedIds.length > 0) {
+          deletedIds = result.deletedIds;
+          return { ...item, children: result.newItems };
+        }
+        // Tenta encontrar em subníveis
+        const deepResult = removeItemFromNavigation(item.children, itemId);
+        if (deepResult.deletedIds.length > 0) {
+          deletedIds = deepResult.deletedIds;
+          return { ...item, children: deepResult.newItems };
+        }
+      }
+      return item;
+    });
+
+    return { newItems, deletedIds };
+  };
+
+  const handleDeleteSection = async (sectionId: string, parentId?: string) => {
+    const { newItems: newNav, deletedIds } = removeItemFromNavigation(navigation, sectionId, parentId);
+
+    if (deletedIds.length === 0) {
+      // Tenta encontrar sem parentId
+      const result = removeItemFromNavigation(navigation, sectionId);
+      if (result.deletedIds.length > 0) {
+        try {
+          await saveNavigationToDatabase(result.newItems);
+          for (const id of result.deletedIds) {
+            await deleteDocFromDatabase(id);
+          }
+          setNavigation(result.newItems);
+          const newDocs = { ...docs };
+          result.deletedIds.forEach(id => delete newDocs[id]);
+          setDocs(newDocs);
+
+          if (result.deletedIds.includes(activeSection)) {
+            const firstId = findFirstLeafId(result.newItems);
+            setActiveSection(firstId || "overview");
+          }
+          toast.success("Item excluído!");
+        } catch (error) {
+          toast.error("Erro ao excluir item");
+        }
+        return;
+      }
     }
 
     try {
       await saveNavigationToDatabase(newNav);
-      for (const id of idsToDelete) {
+      for (const id of deletedIds) {
         await deleteDocFromDatabase(id);
       }
       setNavigation(newNav);
       const newDocs = { ...docs };
-      idsToDelete.forEach(id => delete newDocs[id]);
+      deletedIds.forEach(id => delete newDocs[id]);
       setDocs(newDocs);
 
-      if (activeSection === sectionId) {
-        const firstSection = newNav[0]?.children?.[0]?.id || newNav[0]?.id || "overview";
-        setActiveSection(firstSection);
+      if (deletedIds.includes(activeSection)) {
+        const firstId = findFirstLeafId(newNav);
+        setActiveSection(firstId || "overview");
       }
-      toast.success("Página excluída!");
+      toast.success("Item excluído!");
     } catch (error) {
-      toast.error("Erro ao excluir página");
+      toast.error("Erro ao excluir item");
     }
   };
 
-  const handleRenameSection = async (sectionId: string, newTitle: string, parentId?: string) => {
-    let newNav: NavItem[];
-    if (parentId) {
-      newNav = navigation.map(section => {
-        if (section.id === parentId) {
-          return {
-            ...section,
-            children: section.children?.map(child => 
-              child.id === sectionId ? { ...child, title: newTitle } : child
-            )
-          };
-        }
-        return section;
-      });
-    } else {
-      newNav = navigation.map(section => 
-        section.id === sectionId ? { ...section, title: newTitle } : section
-      );
+  // Encontra o primeiro ID "folha" na navegação
+  const findFirstLeafId = (items: NavItem[]): string | null => {
+    for (const item of items) {
+      if (!item.children || item.children.length === 0) {
+        return item.id;
+      }
+      const childId = findFirstLeafId(item.children);
+      if (childId) return childId;
     }
+    return items[0]?.id || null;
+  };
+
+  // Função recursiva para renomear item em qualquer nível
+  const renameItemInNavigation = (
+    items: NavItem[], 
+    itemId: string, 
+    newTitle: string,
+    parentId?: string
+  ): NavItem[] => {
+    return items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, title: newTitle };
+      }
+      if (item.children) {
+        return {
+          ...item,
+          children: renameItemInNavigation(item.children, itemId, newTitle, parentId)
+        };
+      }
+      return item;
+    });
+  };
+
+  const handleRenameSection = async (sectionId: string, newTitle: string, parentId?: string) => {
+    const newNav = renameItemInNavigation(navigation, sectionId, newTitle, parentId);
 
     try {
       await saveNavigationToDatabase(newNav);
@@ -173,13 +300,20 @@ const Index = () => {
     }
   };
 
-  const getCurrentTitle = () => {
-    for (const section of navigation) {
-      if (section.id === activeSection) return section.title;
-      const child = section.children?.find(c => c.id === activeSection);
-      if (child) return child.title;
+  // Função recursiva para encontrar título
+  const findTitle = (items: NavItem[], targetId: string): string | null => {
+    for (const item of items) {
+      if (item.id === targetId) return item.title;
+      if (item.children) {
+        const found = findTitle(item.children, targetId);
+        if (found) return found;
+      }
     }
-    return "Documento";
+    return null;
+  };
+
+  const getCurrentTitle = () => {
+    return findTitle(navigation, activeSection) || "Documento";
   };
 
   const handleSignOut = async () => {

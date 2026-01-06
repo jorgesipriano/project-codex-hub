@@ -1,19 +1,28 @@
 import { useState } from "react";
-import { ChevronRight, FileText, Terminal, Code, Settings, Database, Folder, Search, Plus, Trash2, Edit2 } from "lucide-react";
+import { ChevronRight, FileText, Terminal, Code, Settings, Database, Folder, Search, Plus, Trash2, Edit2, CheckSquare, StickyNote, FolderPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export type ItemType = "section" | "note" | "task" | "folder";
 
 export interface NavItem {
   id: string;
   title: string;
   icon?: string;
-  children?: { id: string; title: string }[];
+  type?: ItemType;
+  children?: NavItem[];
 }
 
 interface SidebarProps {
   navigation: NavItem[];
   activeSection: string;
   onSectionChange: (section: string) => void;
-  onAddSection: (parentId?: string) => void;
+  onAddSection: (type: ItemType, parentId?: string) => void;
   onDeleteSection: (sectionId: string, parentId?: string) => void;
   onRenameSection: (sectionId: string, newTitle: string, parentId?: string) => void;
 }
@@ -25,6 +34,16 @@ const iconMap: Record<string, React.ReactNode> = {
   database: <Database className="w-4 h-4" />,
   settings: <Settings className="w-4 h-4" />,
   folder: <Folder className="w-4 h-4" />,
+  note: <StickyNote className="w-4 h-4" />,
+  task: <CheckSquare className="w-4 h-4" />,
+};
+
+const getItemIcon = (item: NavItem) => {
+  if (item.type === "note") return iconMap.note;
+  if (item.type === "task") return iconMap.task;
+  if (item.icon) return iconMap[item.icon];
+  if (item.children && item.children.length >= 0) return iconMap.folder;
+  return iconMap.file;
 };
 
 export function Sidebar({ 
@@ -62,15 +81,182 @@ export function Sidebar({
     setEditValue("");
   };
 
-  const filteredNavigation = navigation.map((section) => ({
-    ...section,
-    children: section.children?.filter((child) =>
-      child.title.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-  })).filter((section) => 
-    section.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (section.children && section.children.length > 0)
-  );
+  const filterNavItems = (items: NavItem[], query: string): NavItem[] => {
+    const result: NavItem[] = [];
+    for (const item of items) {
+      const matchesQuery = item.title.toLowerCase().includes(query.toLowerCase());
+      const filteredChildren = item.children ? filterNavItems(item.children, query) : undefined;
+      
+      if (matchesQuery || (filteredChildren && filteredChildren.length > 0)) {
+        result.push({ ...item, children: filteredChildren });
+      }
+    }
+    return result;
+  };
+
+  const filteredNavigation: NavItem[] = searchQuery 
+    ? filterNavItems(navigation, searchQuery)
+    : navigation;
+
+  const isExpandable = (item: NavItem) => {
+    return item.children && item.children.length > 0;
+  };
+
+  const hasChildren = (item: NavItem) => {
+    return item.type === "section" || item.type === "folder" || (item.children !== undefined);
+  };
+
+  const renderNavItem = (item: NavItem, depth: number = 0, parentId?: string) => {
+    const isFolder = hasChildren(item);
+    const canExpand = isExpandable(item);
+    const isExpanded = expandedSections.includes(item.id);
+
+    if (isFolder) {
+      return (
+        <div key={item.id} className="mb-1 group/section">
+          <div className="flex items-center">
+            <button
+              onClick={() => {
+                if (canExpand) {
+                  toggleSection(item.id);
+                }
+                // Para pastas, também permite selecionar para ver conteúdo
+                if (!item.children || item.children.length === 0) {
+                  onSectionChange(item.id);
+                }
+              }}
+              className={cn(
+                "flex-1 flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
+                depth === 0 
+                  ? "text-foreground hover:bg-secondary" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+                activeSection === item.id && "bg-primary/10 text-primary"
+              )}
+              style={{ paddingLeft: `${12 + depth * 12}px` }}
+            >
+              {getItemIcon(item)}
+              {editingId === item.id ? (
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => finishEditing(parentId)}
+                  onKeyDown={(e) => e.key === "Enter" && finishEditing(parentId)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                />
+              ) : (
+                <span className="flex-1 text-left truncate">{item.title}</span>
+              )}
+              {canExpand && (
+                <ChevronRight
+                  className={cn(
+                    "w-4 h-4 text-muted-foreground transition-transform",
+                    isExpanded && "rotate-90"
+                  )}
+                />
+              )}
+            </button>
+            <div className="hidden group-hover/section:flex items-center gap-1 pr-2">
+              <button
+                onClick={(e) => startEditing(item.id, item.title, e)}
+                className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                title="Renomear"
+              >
+                <Edit2 className="w-3 h-3" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="p-1 text-muted-foreground hover:text-primary rounded transition-colors"
+                    title="Adicionar"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={() => onAddSection("folder", item.id)}>
+                    <Folder className="w-4 h-4 mr-2" />
+                    Subpasta
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onAddSection("note", item.id)}>
+                    <StickyNote className="w-4 h-4 mr-2" />
+                    Nota
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onAddSection("task", item.id)}>
+                    <CheckSquare className="w-4 h-4 mr-2" />
+                    Tarefa
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <button
+                onClick={() => onDeleteSection(item.id, parentId)}
+                className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                title="Excluir"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          
+          {isExpanded && item.children && (
+            <div className="mt-1 space-y-1 animate-fade-in">
+              {item.children.map((child) => renderNavItem(child, depth + 1, item.id))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Item simples (nota ou tarefa no nível raiz ou sem filhos)
+    return (
+      <div key={item.id} className="group/item flex items-center mb-1">
+        <button
+          onClick={() => onSectionChange(item.id)}
+          className={cn(
+            "flex-1 flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all",
+            activeSection === item.id
+              ? "bg-primary/10 text-primary border-l-2 border-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          )}
+          style={{ paddingLeft: `${12 + depth * 12}px` }}
+        >
+          {getItemIcon(item)}
+          {editingId === item.id ? (
+            <input
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => finishEditing(parentId)}
+              onKeyDown={(e) => e.key === "Enter" && finishEditing(parentId)}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+          ) : (
+            <span className="truncate">{item.title}</span>
+          )}
+        </button>
+        <div className="hidden group-hover/item:flex items-center gap-1 pr-2">
+          <button
+            onClick={(e) => startEditing(item.id, item.title, e)}
+            className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+            title="Renomear"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onDeleteSection(item.id, parentId)}
+            className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+            title="Excluir"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <aside className="w-[280px] h-[calc(100vh-64px)] border-r border-border bg-card/50 flex flex-col">
@@ -90,120 +276,33 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-1">
-        {filteredNavigation.map((section) => (
-          <div key={section.id} className="mb-2 group/section">
-            <div className="flex items-center">
-              <button
-                onClick={() => toggleSection(section.id)}
-                className="flex-1 flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary rounded-lg transition-colors"
-              >
-                {iconMap[section.icon || "folder"]}
-                {editingId === section.id ? (
-                  <input
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => finishEditing()}
-                    onKeyDown={(e) => e.key === "Enter" && finishEditing()}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    autoFocus
-                  />
-                ) : (
-                  <span className="flex-1 text-left">{section.title}</span>
-                )}
-                <ChevronRight
-                  className={cn(
-                    "w-4 h-4 text-muted-foreground transition-transform",
-                    expandedSections.includes(section.id) && "rotate-90"
-                  )}
-                />
-              </button>
-              <div className="hidden group-hover/section:flex items-center gap-1 pr-2">
-                <button
-                  onClick={(e) => startEditing(section.id, section.title, e)}
-                  className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
-                  title="Renomear"
-                >
-                  <Edit2 className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => onAddSection(section.id)}
-                  className="p-1 text-muted-foreground hover:text-primary rounded transition-colors"
-                  title="Adicionar página"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => onDeleteSection(section.id)}
-                  className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
-                  title="Excluir seção"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-            
-            {expandedSections.includes(section.id) && section.children && (
-              <div className="ml-4 mt-1 space-y-1 animate-fade-in">
-                {section.children.map((child) => (
-                  <div key={child.id} className="group/item flex items-center">
-                    <button
-                      onClick={() => onSectionChange(child.id)}
-                      className={cn(
-                        "flex-1 flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all",
-                        activeSection === child.id
-                          ? "bg-primary/10 text-primary border-l-2 border-primary"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                      )}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
-                      {editingId === child.id ? (
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => finishEditing(section.id)}
-                          onKeyDown={(e) => e.key === "Enter" && finishEditing(section.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                          autoFocus
-                        />
-                      ) : (
-                        child.title
-                      )}
-                    </button>
-                    <div className="hidden group-hover/item:flex items-center gap-1 pr-2">
-                      <button
-                        onClick={(e) => startEditing(child.id, child.title, e)}
-                        className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
-                        title="Renomear"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => onDeleteSection(child.id, section.id)}
-                        className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+        {filteredNavigation.map((item) => renderNavItem(item))}
 
-        {/* Add new section button */}
-        <button
-          onClick={() => onAddSection()}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors mt-4 border border-dashed border-border"
-        >
-          <Plus className="w-4 h-4" />
-          Nova Seção
-        </button>
+        {/* Add new items buttons */}
+        <div className="pt-4 space-y-2 border-t border-border mt-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors border border-dashed border-border">
+                <Plus className="w-4 h-4" />
+                Adicionar
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => onAddSection("section")}>
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Nova Seção
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddSection("note")}>
+                <StickyNote className="w-4 h-4 mr-2" />
+                Nova Nota
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddSection("task")}>
+                <CheckSquare className="w-4 h-4 mr-2" />
+                Nova Tarefa
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </nav>
 
       {/* Footer */}
