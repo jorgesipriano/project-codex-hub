@@ -274,6 +274,27 @@ const Index = () => {
     return null;
   };
 
+  // Função recursiva para encontrar item e verificar tipo
+  const findItem = (items: NavItem[], targetId: string): NavItem | null => {
+    for (const item of items) {
+      if (item.id === targetId) return item;
+      if (item.children) {
+        const found = findItem(item.children, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const getCurrentItem = () => {
+    return findItem(navigation, activeSection);
+  };
+
+  const isCurrentTaskPage = () => {
+    const item = getCurrentItem();
+    return item?.type === "task";
+  };
+
   const getCurrentTitle = () => {
     return findTitle(navigation, activeSection) || "Documento";
   };
@@ -374,6 +395,7 @@ const Index = () => {
           content={docs[activeSection] || ""}
           title={getCurrentTitle()}
           isEditing={isEditing}
+          isTaskPage={isCurrentTaskPage()}
           onEdit={() => setIsEditing(true)}
           onSave={handleSaveContent}
           onCancelEdit={() => setIsEditing(false)}

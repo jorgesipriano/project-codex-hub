@@ -1,6 +1,7 @@
 import { CodeBlock } from "./CodeBlock";
 import { Breadcrumb } from "./Breadcrumb";
 import { DocEditor } from "./DocEditor";
+import { TaskView, parseTasksFromMarkdown, tasksToMarkdown, TaskItem } from "./TaskView";
 import { AlertCircle, CheckCircle2, Edit2, Info, Lightbulb, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +10,7 @@ interface DocContentProps {
   content: string;
   title: string;
   isEditing: boolean;
+  isTaskPage?: boolean;
   onEdit: () => void;
   onSave: (content: string) => void;
   onCancelEdit: () => void;
@@ -232,6 +234,7 @@ export function DocContent({
   content, 
   title,
   isEditing, 
+  isTaskPage,
   onEdit, 
   onSave,
   onCancelEdit,
@@ -251,6 +254,16 @@ export function DocContent({
 
   const hasContent = content && content.trim().length > 0;
 
+  // Handle task page with TaskView component
+  const handleTaskUpdate = (tasks: TaskItem[]) => {
+    const newContent = tasksToMarkdown(title, tasks);
+    onSave(newContent);
+  };
+
+  // Check if content has tasks (for auto-detection)
+  const hasTaskItems = content.includes("- [ ]") || content.includes("- [x]") || content.includes("- [X]");
+  const shouldShowTaskView = isTaskPage || hasTaskItems;
+
   return (
     <main className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="max-w-4xl mx-auto px-6 py-8">
@@ -261,13 +274,25 @@ export function DocContent({
             className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
           >
             <Edit2 className="w-4 h-4" />
-            Editar
+            Editar Markdown
           </button>
         </div>
 
         {hasContent ? (
-          <div className="doc-prose animate-fade-in">
-            {parseMarkdown(content, onToggleTask)}
+          <div className="animate-fade-in">
+            {shouldShowTaskView ? (
+              <>
+                <h1 className="text-3xl font-bold text-foreground mb-6">{title}</h1>
+                <TaskView 
+                  tasks={parseTasksFromMarkdown(content)} 
+                  onUpdate={handleTaskUpdate}
+                />
+              </>
+            ) : (
+              <div className="doc-prose">
+                {parseMarkdown(content, onToggleTask)}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
@@ -288,7 +313,7 @@ export function DocContent({
           </div>
         )}
         
-        {hasContent && (
+        {hasContent && !shouldShowTaskView && (
           <div className="mt-12 pt-6 border-t border-border flex items-center justify-between text-sm">
             <div className="text-muted-foreground">
               Última atualização: {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
