@@ -160,44 +160,27 @@ const Index = () => {
   // Função recursiva para deletar item em qualquer nível
   const removeItemFromNavigation = (
     items: NavItem[], 
-    itemId: string, 
-    parentId?: string
+    itemId: string
   ): { newItems: NavItem[]; deletedIds: string[] } => {
     let deletedIds: string[] = [];
-
-    if (!parentId) {
-      const itemToDelete = items.find(i => i.id === itemId);
-      if (itemToDelete) {
-        deletedIds = collectAllIds(itemToDelete);
-      }
+    
+    // Verifica se o item está neste nível
+    const itemToDelete = items.find(i => i.id === itemId);
+    if (itemToDelete) {
+      deletedIds = collectAllIds(itemToDelete);
       return {
         newItems: items.filter(i => i.id !== itemId),
         deletedIds
       };
     }
 
+    // Se não encontrou, procura recursivamente nos filhos
     const newItems = items.map(item => {
-      if (item.id === parentId) {
-        const childToDelete = item.children?.find(c => c.id === itemId);
-        if (childToDelete) {
-          deletedIds = collectAllIds(childToDelete);
-        }
-        return {
-          ...item,
-          children: item.children?.filter(c => c.id !== itemId)
-        };
-      }
-      if (item.children) {
-        const result = removeItemFromNavigation(item.children, itemId, parentId);
+      if (item.children && item.children.length > 0) {
+        const result = removeItemFromNavigation(item.children, itemId);
         if (result.deletedIds.length > 0) {
           deletedIds = result.deletedIds;
           return { ...item, children: result.newItems };
-        }
-        // Tenta encontrar em subníveis
-        const deepResult = removeItemFromNavigation(item.children, itemId);
-        if (deepResult.deletedIds.length > 0) {
-          deletedIds = deepResult.deletedIds;
-          return { ...item, children: deepResult.newItems };
         }
       }
       return item;
@@ -206,33 +189,12 @@ const Index = () => {
     return { newItems, deletedIds };
   };
 
-  const handleDeleteSection = async (sectionId: string, parentId?: string) => {
-    const { newItems: newNav, deletedIds } = removeItemFromNavigation(navigation, sectionId, parentId);
+  const handleDeleteSection = async (sectionId: string) => {
+    const { newItems: newNav, deletedIds } = removeItemFromNavigation(navigation, sectionId);
 
     if (deletedIds.length === 0) {
-      // Tenta encontrar sem parentId
-      const result = removeItemFromNavigation(navigation, sectionId);
-      if (result.deletedIds.length > 0) {
-        try {
-          await saveNavigationToDatabase(result.newItems);
-          for (const id of result.deletedIds) {
-            await deleteDocFromDatabase(id);
-          }
-          setNavigation(result.newItems);
-          const newDocs = { ...docs };
-          result.deletedIds.forEach(id => delete newDocs[id]);
-          setDocs(newDocs);
-
-          if (result.deletedIds.includes(activeSection)) {
-            const firstId = findFirstLeafId(result.newItems);
-            setActiveSection(firstId || "overview");
-          }
-          toast.success("Item excluído!");
-        } catch (error) {
-          toast.error("Erro ao excluir item");
-        }
-        return;
-      }
+      toast.error("Item não encontrado");
+      return;
     }
 
     try {
@@ -316,6 +278,29 @@ const Index = () => {
     return findTitle(navigation, activeSection) || "Documento";
   };
 
+  const handleToggleTask = async (lineIndex: number) => {
+    const content = docs[activeSection] || "";
+    const lines = content.split("\n");
+    const line = lines[lineIndex];
+    
+    if (line) {
+      // Toggle between [ ] and [x]
+      if (line.includes("- [ ]")) {
+        lines[lineIndex] = line.replace("- [ ]", "- [x]");
+      } else if (line.includes("- [x]") || line.includes("- [X]")) {
+        lines[lineIndex] = line.replace(/- \[[xX]\]/, "- [ ]");
+      }
+      
+      const newContent = lines.join("\n");
+      try {
+        await saveDocToDatabase(activeSection, newContent);
+        setDocs(prev => ({ ...prev, [activeSection]: newContent }));
+      } catch (error) {
+        toast.error("Erro ao atualizar tarefa");
+      }
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
@@ -392,6 +377,7 @@ const Index = () => {
           onEdit={() => setIsEditing(true)}
           onSave={handleSaveContent}
           onCancelEdit={() => setIsEditing(false)}
+          onToggleTask={handleToggleTask}
         />
       </div>
     </div>

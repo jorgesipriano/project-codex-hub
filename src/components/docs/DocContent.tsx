@@ -12,6 +12,7 @@ interface DocContentProps {
   onEdit: () => void;
   onSave: (content: string) => void;
   onCancelEdit: () => void;
+  onToggleTask?: (lineIndex: number) => void;
 }
 
 interface AlertProps {
@@ -42,24 +43,60 @@ function Alert({ type, children }: AlertProps) {
   );
 }
 
-function parseMarkdown(content: string) {
+function parseMarkdown(content: string, onToggleTask?: (lineIndex: number) => void) {
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
   let inCodeBlock = false;
   let codeContent: string[] = [];
   let codeLanguage = "";
-  let listItems: string[] = [];
+  let listItems: { text: string; lineIndex: number }[] = [];
+  let taskItems: { text: string; checked: boolean; lineIndex: number }[] = [];
 
   const flushList = () => {
     if (listItems.length > 0) {
       elements.push(
         <ul key={`list-${elements.length}`} className="list-disc list-inside mb-4 text-muted-foreground space-y-1">
           {listItems.map((item, i) => (
-            <li key={i}>{parseInlineMarkdown(item)}</li>
+            <li key={i}>{parseInlineMarkdown(item.text)}</li>
           ))}
         </ul>
       );
       listItems = [];
+    }
+  };
+
+  const flushTasks = () => {
+    if (taskItems.length > 0) {
+      elements.push(
+        <ul key={`tasks-${elements.length}`} className="mb-4 space-y-2">
+          {taskItems.map((task, i) => (
+            <li key={i} className="flex items-center gap-3 group">
+              <button
+                onClick={() => onToggleTask?.(task.lineIndex)}
+                className={cn(
+                  "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
+                  task.checked 
+                    ? "bg-primary border-primary text-primary-foreground" 
+                    : "border-muted-foreground/50 hover:border-primary"
+                )}
+              >
+                {task.checked && (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+              <span className={cn(
+                "text-muted-foreground transition-all",
+                task.checked && "line-through opacity-60"
+              )}>
+                {parseInlineMarkdown(task.text)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      );
+      taskItems = [];
     }
   };
 
@@ -90,6 +127,7 @@ function parseMarkdown(content: string) {
         inCodeBlock = false;
       } else {
         flushList();
+        flushTasks();
         inCodeBlock = true;
         codeLanguage = line.slice(3).trim();
       }
@@ -101,9 +139,20 @@ function parseMarkdown(content: string) {
       return;
     }
 
+    // Task items - [ ] or - [x]
+    const taskMatch = line.match(/^- \[([ xX])\] (.*)$/);
+    if (taskMatch) {
+      flushList(); // Flush regular list before tasks
+      const isChecked = taskMatch[1].toLowerCase() === 'x';
+      taskItems.push({ text: taskMatch[2], checked: isChecked, lineIndex: index });
+      return;
+    } else {
+      flushTasks();
+    }
+
     // List items
     if (line.startsWith("- ") || line.startsWith("* ")) {
-      listItems.push(line.slice(2));
+      listItems.push({ text: line.slice(2), lineIndex: index });
       return;
     } else {
       flushList();
@@ -173,6 +222,7 @@ function parseMarkdown(content: string) {
   });
 
   flushList();
+  flushTasks();
 
   return elements;
 }
@@ -184,7 +234,8 @@ export function DocContent({
   isEditing, 
   onEdit, 
   onSave,
-  onCancelEdit 
+  onCancelEdit,
+  onToggleTask
 }: DocContentProps) {
   if (isEditing) {
     return (
@@ -216,7 +267,7 @@ export function DocContent({
 
         {hasContent ? (
           <div className="doc-prose animate-fade-in">
-            {parseMarkdown(content)}
+            {parseMarkdown(content, onToggleTask)}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
