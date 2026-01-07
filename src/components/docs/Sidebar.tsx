@@ -23,8 +23,8 @@ interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   onAddSection: (type: ItemType, parentId?: string) => void;
-  onDeleteSection: (sectionId: string, parentId?: string) => void;
-  onRenameSection: (sectionId: string, newTitle: string, parentId?: string) => void;
+  onDeleteSection: (sectionId: string) => void;
+  onRenameSection: (sectionId: string, newTitle: string) => void;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -73,9 +73,9 @@ export function Sidebar({
     setEditValue(title);
   };
 
-  const finishEditing = (parentId?: string) => {
+  const finishEditing = () => {
     if (editingId && editValue.trim()) {
-      onRenameSection(editingId, editValue.trim(), parentId);
+      onRenameSection(editingId, editValue.trim());
     }
     setEditingId(null);
     setEditValue("");
@@ -106,7 +106,7 @@ export function Sidebar({
     return item.type === "section" || item.type === "folder" || (item.children !== undefined);
   };
 
-  const renderNavItem = (item: NavItem, depth: number = 0, parentId?: string) => {
+  const renderNavItem = (item: NavItem, depth: number = 0) => {
     const isFolder = hasChildren(item);
     const canExpand = isExpandable(item);
     const isExpanded = expandedSections.includes(item.id);
@@ -140,8 +140,8 @@ export function Sidebar({
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => finishEditing(parentId)}
-                  onKeyDown={(e) => e.key === "Enter" && finishEditing(parentId)}
+                  onBlur={() => finishEditing()}
+                  onKeyDown={(e) => e.key === "Enter" && finishEditing()}
                   onClick={(e) => e.stopPropagation()}
                   className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   autoFocus
@@ -191,7 +191,7 @@ export function Sidebar({
                 </DropdownMenuContent>
               </DropdownMenu>
               <button
-                onClick={() => onDeleteSection(item.id, parentId)}
+                onClick={() => onDeleteSection(item.id)}
                 className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
                 title="Excluir"
               >
@@ -202,7 +202,7 @@ export function Sidebar({
           
           {isExpanded && item.children && (
             <div className="mt-1 space-y-1 animate-fade-in">
-              {item.children.map((child) => renderNavItem(child, depth + 1, item.id))}
+              {item.children.map((child) => renderNavItem(child, depth + 1))}
             </div>
           )}
         </div>
@@ -228,8 +228,8 @@ export function Sidebar({
               type="text"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              onBlur={() => finishEditing(parentId)}
-              onKeyDown={(e) => e.key === "Enter" && finishEditing(parentId)}
+              onBlur={() => finishEditing()}
+              onKeyDown={(e) => e.key === "Enter" && finishEditing()}
               onClick={(e) => e.stopPropagation()}
               className="flex-1 bg-secondary px-2 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               autoFocus
@@ -247,7 +247,7 @@ export function Sidebar({
             <Edit2 className="w-3 h-3" />
           </button>
           <button
-            onClick={() => onDeleteSection(item.id, parentId)}
+            onClick={() => onDeleteSection(item.id)}
             className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
             title="Excluir"
           >
