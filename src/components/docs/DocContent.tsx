@@ -267,15 +267,8 @@ export function DocContent({
   return (
     <main className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <Breadcrumb items={[{ label: "Docs" }, { label: title }]} />
-          <button
-            onClick={onEdit}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
-          >
-            <Edit2 className="w-4 h-4" />
-            Editar Markdown
-          </button>
         </div>
 
         {hasContent ? (
@@ -314,19 +307,22 @@ export function DocContent({
         )}
         
         {hasContent && !shouldShowTaskView && (
-          <div className="mt-12 pt-6 border-t border-border flex items-center justify-between text-sm">
+          <div className="mt-12 pt-6 border-t border-border text-sm">
             <div className="text-muted-foreground">
               Última atualização: {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
             </div>
-            <button 
-              onClick={onEdit}
-              className="text-primary hover:underline flex items-center gap-1"
-            >
-              Editar esta página →
-            </button>
           </div>
         )}
       </div>
+
+      {/* Floating edit button */}
+      <button
+        onClick={onEdit}
+        className="fixed bottom-6 right-6 flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground rounded-full shadow-lg hover:opacity-90 transition-all hover:scale-105 z-50"
+      >
+        <Edit2 className="w-4 h-4" />
+        <span className="hidden sm:inline">Editar</span>
+      </button>
     </main>
   );
 }
