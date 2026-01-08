@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ChevronRight, FileText, Terminal, Code, Settings, Database, Folder, Search, Plus, Trash2, Edit2, CheckSquare, StickyNote, FolderPlus } from "lucide-react";
+import { ChevronRight, FileText, Terminal, Code, Settings, Database, Folder, Search, Plus, Trash2, Edit2, CheckSquare, StickyNote, FolderPlus, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export type ItemType = "section" | "note" | "task" | "folder";
 
@@ -54,6 +56,7 @@ export function Sidebar({
   onDeleteSection,
   onRenameSection
 }: SidebarProps) {
+  const isMobile = useIsMobile();
   const [expandedSections, setExpandedSections] = useState<string[]>(
     navigation.slice(0, 2).map(n => n.id)
   );
@@ -158,24 +161,23 @@ export function Sidebar({
                 />
               )}
             </button>
-            <div className="hidden group-hover/section:flex items-center gap-1 pr-2">
-              <button
-                onClick={(e) => startEditing(item.id, item.title, e)}
-                className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
-                title="Renomear"
-              >
-                <Edit2 className="w-3 h-3" />
-              </button>
+            {/* Mobile: Menu dropdown, Desktop: hover actions */}
+            {isMobile ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="p-1 text-muted-foreground hover:text-primary rounded transition-colors"
-                    title="Adicionar"
+                    className="p-2 text-muted-foreground hover:text-foreground rounded transition-colors"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <Plus className="w-3 h-3" />
+                    <MoreVertical className="w-4 h-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startEditing(item.id, item.title, e as any); }}>
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Renomear
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onAddSection("folder", item.id)}>
                     <Folder className="w-4 h-4 mr-2" />
                     Subpasta
@@ -188,16 +190,58 @@ export function Sidebar({
                     <CheckSquare className="w-4 h-4 mr-2" />
                     Tarefa
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => onDeleteSection(item.id)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <button
-                onClick={() => onDeleteSection(item.id)}
-                className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
-                title="Excluir"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
+            ) : (
+              <div className="hidden group-hover/section:flex items-center gap-1 pr-2">
+                <button
+                  onClick={(e) => startEditing(item.id, item.title, e)}
+                  className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                  title="Renomear"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-1 text-muted-foreground hover:text-primary rounded transition-colors"
+                      title="Adicionar"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => onAddSection("folder", item.id)}>
+                      <Folder className="w-4 h-4 mr-2" />
+                      Subpasta
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onAddSection("note", item.id)}>
+                      <StickyNote className="w-4 h-4 mr-2" />
+                      Nota
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onAddSection("task", item.id)}>
+                      <CheckSquare className="w-4 h-4 mr-2" />
+                      Tarefa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  onClick={() => onDeleteSection(item.id)}
+                  className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                  title="Excluir"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
           
           {isExpanded && item.children && (
@@ -238,22 +282,50 @@ export function Sidebar({
             <span className="truncate">{item.title}</span>
           )}
         </button>
-        <div className="hidden group-hover/item:flex items-center gap-1 pr-2">
-          <button
-            onClick={(e) => startEditing(item.id, item.title, e)}
-            className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
-            title="Renomear"
-          >
-            <Edit2 className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => onDeleteSection(item.id)}
-            className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
-            title="Excluir"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </div>
+        {/* Mobile: Menu dropdown, Desktop: hover actions */}
+        {isMobile ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-2 text-muted-foreground hover:text-foreground rounded transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startEditing(item.id, item.title, e as any); }}>
+                <Edit2 className="w-4 h-4 mr-2" />
+                Renomear
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => onDeleteSection(item.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="hidden group-hover/item:flex items-center gap-1 pr-2">
+            <button
+              onClick={(e) => startEditing(item.id, item.title, e)}
+              className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+              title="Renomear"
+            >
+              <Edit2 className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => onDeleteSection(item.id)}
+              className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+              title="Excluir"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        )}
       </div>
     );
   };
